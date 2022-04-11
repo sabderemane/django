@@ -45,3 +45,17 @@ QUnit.test('preserve scroll position', function(assert) {
     assert.equal(toSelectBox.options.length, selectedOptions.length);
     assert.notEqual(fromSelectBox.scrollTop, 0);
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    $('<select id="id"></select>').appendTo('#qunit-fixture');
+    $('<option value="0">A</option>').appendTo('#id');
+    $('<option value="1">B</option>').appendTo('#id');
+    SelectBox.init('id');
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

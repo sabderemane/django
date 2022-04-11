@@ -1,0 +1,37 @@
+
+name: Accessibility
+
+on:
+  pull_request:
+    paths:
+      - 'contrib/admin/static/**'
+      - 'contrib/admin/templates/**'
+      - 'contrib/admin/templatetags/**'
+      - 'forms/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'contrib/admin/static/**'
+      - 'contrib/admin/templates/**'
+      - 'contrib/admin/templatetags/**'
+      - 'forms/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  axe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '12'
+          cache: 'npm'
+          cache-dependency-path: '**/package.json'
+      - run: npm install
+      - run: npm test

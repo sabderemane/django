@@ -22,3 +22,13 @@ QUnit.test('filter by a model name', function(assert) {
     this.navFilter[0].dispatchEvent(new Event('change'));
     assert.equal(this.navSidebar.find('tr[class^="model-"]:visible').length, 0);
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

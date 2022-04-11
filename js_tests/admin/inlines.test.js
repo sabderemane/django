@@ -172,3 +172,15 @@ QUnit.test('make removeButtons visible again', function(assert) {
     addButton.trigger($.Event( "click", { target: addButton } ));
     assert.equal(this.table.find('.inline-deletelink:visible').length, 2);
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    const addButton = this.table.find('.add-row a');
+    addButton.click();
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

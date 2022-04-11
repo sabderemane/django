@@ -40,3 +40,15 @@ QUnit.test('time zone offset warning', function(assert) {
     $('body').attr('data-admin-utc-offset', savedOffset);
     assert.equal($('.timezonewarning').text(), 'Note: You are 1 hour behind server time.');
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    const timeField = $('<input type="text" name="time_test" class="vTimeField">');
+    $('#qunit-fixture').append(timeField);
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

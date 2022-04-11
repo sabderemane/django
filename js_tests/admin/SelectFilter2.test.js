@@ -16,3 +16,16 @@ QUnit.test('init', function(assert) {
     assert.equal($('.selector-remove').text(), "Remove");
     assert.equal($('.selector-clearall').text(), "Remove all");
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    $('<form><select id="id"></select></form>').appendTo('#qunit-fixture');
+    $('<option value="0">A</option>').appendTo('#id');
+    SelectFilter.init('id', 'things', 0);
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

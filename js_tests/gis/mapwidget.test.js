@@ -91,3 +91,17 @@ QUnit.test('MapWidget.IsCollection', function(assert) {
     widget = new MapWidget(options);
     assert.ok(widget.options.is_collection);
 });
+
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    const options = {id: 'id_point', map_id: 'id_point_map', geom_name: 'Point'};
+    const widget = new MapWidget(options);
+    $('#qunit-fixture').append(widget);
+    const done = assert.async();
+    axe.run($('#qunit-fixture')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

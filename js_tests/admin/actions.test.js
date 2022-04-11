@@ -21,3 +21,13 @@ QUnit.test('check', function(assert) {
     $('#action-toggle').click();
     assert.ok($('.action-select').is(':checked'));
 });
+
+QUnit.test("a11y check", function(assert) {
+    const $ = django.jQuery;
+    const done = assert.async();
+    axe.run($('.action-select')[0], function(err, result) {
+        assert.equal(err, null);
+        assert.equal(result.violations.length, 0, "There should be no A11y violations (check console for errors)");
+        done();
+    });
+});

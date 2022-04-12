@@ -2770,16 +2770,16 @@ class SchemaTests(TransactionTestCase):
             with connection.schema_editor() as editor:
                 editor.add_constraint(Author, constraint)
                 sql = constraint.create_sql(Author, editor)
-        table = Author._meta.db_table
-        constraints = self.get_constraints(table)
-        self.assertIn(constraint.name, constraints)
-        self.assertIs(constraints[constraint.name]["unique"], True)
-        # SQL contains columns.
-        self.assertIs(sql.references_column(table, "name"), True)
-        self.assertIs(sql.references_column(table, "weight"), True)
-        # Remove constraint.
-        with connection.schema_editor() as editor:
-            editor.remove_constraint(Author, constraint)
+            table = Author._meta.db_table
+            constraints = self.get_constraints(table)
+            self.assertIn(constraint.name, constraints)
+            self.assertIs(constraints[constraint.name]["unique"], True)
+            # SQL contains columns.
+            self.assertIs(sql.references_column(table, "name"), True)
+            self.assertIs(sql.references_column(table, "weight"), True)
+            # Remove constraint.
+            with connection.schema_editor() as editor:
+                editor.remove_constraint(Author, constraint)
         self.assertNotIn(constraint.name, self.get_constraints(table))
 
     @skipUnlessDBFeature("supports_expression_indexes")
@@ -3961,6 +3961,20 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor, self.assertNumQueries(0):
             editor.alter_field(Book, new_field, old_field, strict=True)
 
+    def test_alter_field_choices_noop(self):
+        with connection.schema_editor() as editor:
+            editor.create_model(Author)
+        old_field = Author._meta.get_field("name")
+        new_field = CharField(
+            choices=(("Jane", "Jane"), ("Joe", "Joe")),
+            max_length=255,
+        )
+        new_field.set_attributes_from_name("name")
+        with connection.schema_editor() as editor, self.assertNumQueries(0):
+            editor.alter_field(Author, old_field, new_field, strict=True)
+        with connection.schema_editor() as editor, self.assertNumQueries(0):
+            editor.alter_field(Author, new_field, old_field, strict=True)
+
     def test_add_textfield_unhashable_default(self):
         # Create the table
         with connection.schema_editor() as editor:
@@ -4565,7 +4579,9 @@ class SchemaTests(TransactionTestCase):
             editor.alter_field(Author, new_field, old_field, strict=True)
         self.assertIsNone(self.get_column_collation(Author._meta.db_table, "name"))
 
-    @skipUnlessDBFeature("supports_collation_on_charfield")
+    @skipUnlessDBFeature(
+        "supports_collation_on_charfield", "supports_collation_on_textfield"
+    )
     def test_alter_field_type_and_db_collation(self):
         collation = connection.features.test_collations.get("non_default")
         if not collation:

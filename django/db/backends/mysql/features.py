@@ -52,17 +52,14 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     @cached_property
     def minimum_database_version(self):
         if self.connection.mysql_is_mariadb:
-            return (10, 2)
+            return (10, 4)
         else:
             return (5, 7)
 
     @cached_property
     def bare_select_suffix(self):
-        if (
-            self.connection.mysql_is_mariadb and self.connection.mysql_version < (10, 4)
-        ) or (
-            not self.connection.mysql_is_mariadb
-            and self.connection.mysql_version < (8,)
+        if not self.connection.mysql_is_mariadb and self.connection.mysql_version < (
+            8,
         ):
             return " FROM DUAL"
         return ""
@@ -254,8 +251,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     @cached_property
     def can_introspect_check_constraints(self):
         if self.connection.mysql_is_mariadb:
-            version = self.connection.mysql_version
-            return version >= (10, 3, 10)
+            return True
         return self.connection.mysql_version >= (8, 0, 16)
 
     @cached_property
@@ -305,6 +301,9 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         """
         return self._mysql_storage_engine != "MyISAM"
 
+    uses_savepoints = property(operator.attrgetter("supports_transactions"))
+    can_release_savepoints = property(operator.attrgetter("supports_transactions"))
+
     @cached_property
     def ignores_table_name_case(self):
         return self.connection.mysql_server_data["lower_case_table_names"]
@@ -328,6 +327,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
 
     @cached_property
     def supports_index_column_ordering(self):
+        if self._mysql_storage_engine != "InnoDB":
+            return False
         if self.connection.mysql_is_mariadb:
             return self.connection.mysql_version >= (10, 8)
         return self.connection.mysql_version >= (8, 0, 1)
@@ -339,3 +340,9 @@ class DatabaseFeatures(BaseDatabaseFeatures):
             and self._mysql_storage_engine != "MyISAM"
             and self.connection.mysql_version >= (8, 0, 13)
         )
+
+    @cached_property
+    def can_rename_index(self):
+        if self.connection.mysql_is_mariadb:
+            return self.connection.mysql_version >= (10, 5, 2)
+        return True

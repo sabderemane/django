@@ -20,8 +20,9 @@ class ExplainTests(TestCase):
             Tag.objects.filter(name="test").annotate(Count("children")),
             Tag.objects.filter(name="test").values_list("name"),
             Tag.objects.order_by().union(Tag.objects.order_by().filter(name="test")),
-            Tag.objects.select_for_update().filter(name="test"),
         ]
+        if connection.features.has_select_for_update:
+            querysets.append(Tag.objects.select_for_update().filter(name="test"))
         supported_formats = connection.features.supported_explain_formats
         all_formats = (
             (None,)
@@ -31,9 +32,7 @@ class ExplainTests(TestCase):
         for idx, queryset in enumerate(querysets):
             for format in all_formats:
                 with self.subTest(format=format, queryset=idx):
-                    with self.assertNumQueries(1), CaptureQueriesContext(
-                        connection
-                    ) as captured_queries:
+                    with self.assertNumQueries(1) as captured_queries:
                         result = queryset.explain(format=format)
                         self.assertTrue(
                             captured_queries[0]["sql"].startswith(
@@ -42,14 +41,16 @@ class ExplainTests(TestCase):
                         )
                         self.assertIsInstance(result, str)
                         self.assertTrue(result)
-                        if format == "xml":
+                        if not format:
+                            continue
+                        if format.lower() == "xml":
                             try:
                                 xml.etree.ElementTree.fromstring(result)
                             except xml.etree.ElementTree.ParseError as e:
                                 self.fail(
                                     f"QuerySet.explain() result is not valid XML: {e}"
                                 )
-                        elif format == "json":
+                        elif format.lower() == "json":
                             try:
                                 json.loads(result)
                             except json.JSONDecodeError as e:
@@ -67,6 +68,8 @@ class ExplainTests(TestCase):
             msg += " Allowed formats: %s" % ", ".join(
                 sorted(connection.features.supported_explain_formats)
             )
+        else:
+            msg += f" {connection.display_name} does not support any formats."
         with self.assertRaisesMessage(ValueError, msg):
             Tag.objects.explain(format="does not exist")
 
@@ -79,9 +82,8 @@ class ExplainTests(TestCase):
             {"verbose": True, "timing": True, "analyze": True},
             {"verbose": False, "timing": False, "analyze": True},
             {"summary": True},
+            {"settings": True},
         ]
-        if connection.features.is_postgresql_12:
-            test_options.append({"settings": True})
         if connection.features.is_postgresql_13:
             test_options.append({"analyze": True, "wal": True})
         for options in test_options:

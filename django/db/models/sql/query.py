@@ -27,6 +27,7 @@ from django.db.models.expressions import (
     OuterRef,
     Ref,
     ResolvedOuterRef,
+    Value,
 )
 from django.db.models.fields import Field
 from django.db.models.fields.related_lookups import MultiColSource
@@ -318,7 +319,7 @@ class Query(BaseExpression):
     def clone(self):
         """
         Return a copy of the current Query. A lightweight alternative to
-        to deepcopy().
+        deepcopy().
         """
         obj = Empty()
         obj.__class__ = self.__class__
@@ -582,8 +583,7 @@ class Query(BaseExpression):
         q.clear_ordering(force=True)
         if limit:
             q.set_limits(high=1)
-        q.add_extra({"a": 1}, None, None, None, None, None)
-        q.set_extra_mask(["a"])
+        q.add_annotation(Value(1), "a")
         return q
 
     def has_results(self, using):

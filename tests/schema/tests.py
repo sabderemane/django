@@ -283,6 +283,8 @@ class SchemaTests(TransactionTestCase):
         Fail if the FK constraint on `model.Meta.db_table`.`column` to
         `expected_fk_table`.id doesn't exist.
         """
+        if not connection.features.can_introspect_foreign_keys:
+            return
         constraints = self.get_constraints(model._meta.db_table)
         constraint_fk = None
         for details in constraints.values():
@@ -292,6 +294,8 @@ class SchemaTests(TransactionTestCase):
         self.assertEqual(constraint_fk, (expected_fk_table, field))
 
     def assertForeignKeyNotExists(self, model, column, expected_fk_table):
+        if not connection.features.can_introspect_foreign_keys:
+            return
         with self.assertRaises(AssertionError):
             self.assertForeignKeyExists(model, column, expected_fk_table)
 
@@ -487,7 +491,7 @@ class SchemaTests(TransactionTestCase):
             editor.create_model(AuthorRef)
         self.assertForeignKeyExists(AuthorRef, "author_id", "schema_author")
 
-    @skipUnlessDBFeature("supports_foreign_keys")
+    @skipUnlessDBFeature("supports_foreign_keys", "can_introspect_foreign_keys")
     def test_fk_db_constraint(self):
         "The db_constraint parameter is respected"
         # Create the table
@@ -969,6 +973,38 @@ class SchemaTests(TransactionTestCase):
             Node.objects.update(parent=parent)
             editor.alter_field(Node, old_field, new_field, strict=True)
 
+    @isolate_apps("schema")
+    def test_alter_null_with_default_value_deferred_constraints(self):
+        class Publisher(Model):
+            class Meta:
+                app_label = "schema"
+
+        class Article(Model):
+            publisher = ForeignKey(Publisher, CASCADE)
+            title = CharField(max_length=50, null=True)
+            description = CharField(max_length=100, null=True)
+
+            class Meta:
+                app_label = "schema"
+
+        with connection.schema_editor() as editor:
+            editor.create_model(Publisher)
+            editor.create_model(Article)
+        self.isolated_local_models = [Article, Publisher]
+
+        publisher = Publisher.objects.create()
+        Article.objects.create(publisher=publisher)
+
+        old_title = Article._meta.get_field("title")
+        new_title = CharField(max_length=50, null=False, default="")
+        new_title.set_attributes_from_name("title")
+        old_description = Article._meta.get_field("description")
+        new_description = CharField(max_length=100, null=False, default="")
+        new_description.set_attributes_from_name("description")
+        with connection.schema_editor() as editor:
+            editor.alter_field(Article, old_title, new_title, strict=True)
+            editor.alter_field(Article, old_description, new_description, strict=True)
+
     def test_alter_text_field_to_date_field(self):
         """
         #25002 - Test conversion of text field to date field.
@@ -1298,7 +1334,7 @@ class SchemaTests(TransactionTestCase):
             editor.alter_field(LocalBook, old_field, new_field, strict=True)
         self.assertForeignKeyExists(LocalBook, "author_id", "schema_author")
 
-    @skipUnlessDBFeature("supports_foreign_keys")
+    @skipUnlessDBFeature("supports_foreign_keys", "can_introspect_foreign_keys")
     def test_alter_o2o_to_fk(self):
         """
         #24163 - Tests altering of OneToOneField to ForeignKey
@@ -1344,7 +1380,7 @@ class SchemaTests(TransactionTestCase):
         )
         self.assertForeignKeyExists(Book, "author_id", "schema_author")
 
-    @skipUnlessDBFeature("supports_foreign_keys")
+    @skipUnlessDBFeature("supports_foreign_keys", "can_introspect_foreign_keys")
     def test_alter_fk_to_o2o(self):
         """
         #24163 - Tests altering of ForeignKey to OneToOneField
@@ -1394,7 +1430,12 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
             editor.create_model(Book)
-        expected_fks = 1 if connection.features.supports_foreign_keys else 0
+        expected_fks = (
+            1
+            if connection.features.supports_foreign_keys
+            and connection.features.can_introspect_foreign_keys
+            else 0
+        )
         expected_indexes = 1 if connection.features.indexes_foreign_keys else 0
 
         # Check the index is right to begin with.
@@ -1412,7 +1453,7 @@ class SchemaTests(TransactionTestCase):
         new_field = OneToOneField(Author, CASCADE)
         new_field.set_attributes_from_name("author")
         with connection.schema_editor() as editor:
-            editor.alter_field(Book, old_field, new_field, strict=True)
+            editor.alter_field(Book, old_field, new_field)
 
         counts = self.get_constraints_count(
             Book._meta.db_table,
@@ -1427,7 +1468,12 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
             editor.create_model(Book)
-        expected_fks = 1 if connection.features.supports_foreign_keys else 0
+        expected_fks = (
+            1
+            if connection.features.supports_foreign_keys
+            and connection.features.can_introspect_foreign_keys
+            else 0
+        )
         expected_indexes = 1 if connection.features.indexes_foreign_keys else 0
 
         # Check the index is right to begin with.
@@ -1463,7 +1509,12 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
             editor.create_model(BookWithO2O)
-        expected_fks = 1 if connection.features.supports_foreign_keys else 0
+        expected_fks = (
+            1
+            if connection.features.supports_foreign_keys
+            and connection.features.can_introspect_foreign_keys
+            else 0
+        )
 
         # Check the unique constraint is right to begin with.
         counts = self.get_constraints_count(
@@ -1477,7 +1528,7 @@ class SchemaTests(TransactionTestCase):
         new_field = ForeignKey(Author, CASCADE)
         new_field.set_attributes_from_name("author")
         with connection.schema_editor() as editor:
-            editor.alter_field(BookWithO2O, old_field, new_field, strict=True)
+            editor.alter_field(BookWithO2O, old_field, new_field)
 
         counts = self.get_constraints_count(
             BookWithO2O._meta.db_table,
@@ -1492,7 +1543,12 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
             editor.create_model(BookWithO2O)
-        expected_fks = 1 if connection.features.supports_foreign_keys else 0
+        expected_fks = (
+            1
+            if connection.features.supports_foreign_keys
+            and connection.features.can_introspect_foreign_keys
+            else 0
+        )
 
         # Check the unique constraint is right to begin with.
         counts = self.get_constraints_count(
@@ -1546,11 +1602,7 @@ class SchemaTests(TransactionTestCase):
         Author.objects.create(name="Foo")
         Author.objects.create(name="Bar")
 
-    def test_alter_autofield_pk_to_bigautofield_pk_sequence_owner(self):
-        """
-        Converting an implicit PK to BigAutoField(primary_key=True) should keep
-        a sequence owner on PostgreSQL.
-        """
+    def test_alter_autofield_pk_to_bigautofield_pk(self):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
         old_field = Author._meta.get_field("id")
@@ -1567,14 +1619,9 @@ class SchemaTests(TransactionTestCase):
             )
             if sequence_reset_sqls:
                 cursor.execute(sequence_reset_sqls[0])
-        # Fail on PostgreSQL if sequence is missing an owner.
         self.assertIsNotNone(Author.objects.create(name="Bar"))
 
-    def test_alter_autofield_pk_to_smallautofield_pk_sequence_owner(self):
-        """
-        Converting an implicit PK to SmallAutoField(primary_key=True) should
-        keep a sequence owner on PostgreSQL.
-        """
+    def test_alter_autofield_pk_to_smallautofield_pk(self):
         with connection.schema_editor() as editor:
             editor.create_model(Author)
         old_field = Author._meta.get_field("id")
@@ -1591,7 +1638,6 @@ class SchemaTests(TransactionTestCase):
             )
             if sequence_reset_sqls:
                 cursor.execute(sequence_reset_sqls[0])
-        # Fail on PostgreSQL if sequence is missing an owner.
         self.assertIsNotNone(Author.objects.create(name="Bar"))
 
     def test_alter_int_pk_to_autofield_pk(self):
@@ -3570,6 +3616,21 @@ class SchemaTests(TransactionTestCase):
         )
         self.assertEqual(self.get_primary_key(Tag._meta.db_table), "slug")
 
+    def test_alter_primary_key_the_same_name(self):
+        with connection.schema_editor() as editor:
+            editor.create_model(Thing)
+
+        old_field = Thing._meta.get_field("when")
+        new_field = CharField(max_length=2, primary_key=True)
+        new_field.set_attributes_from_name("when")
+        new_field.model = Thing
+        with connection.schema_editor() as editor:
+            editor.alter_field(Thing, old_field, new_field, strict=True)
+        self.assertEqual(self.get_primary_key(Thing._meta.db_table), "when")
+        with connection.schema_editor() as editor:
+            editor.alter_field(Thing, new_field, old_field, strict=True)
+        self.assertEqual(self.get_primary_key(Thing._meta.db_table), "when")
+
     def test_context_manager_exit(self):
         """
         Ensures transaction is correctly closed when an error occurs
@@ -3752,7 +3813,7 @@ class SchemaTests(TransactionTestCase):
                 expected_constraint_name, self.get_constraints(model._meta.db_table)
             )
 
-            if editor.sql_create_fk:
+            if editor.sql_create_fk and connection.features.can_introspect_foreign_keys:
                 constraint_name = "CamelCaseFKConstraint"
                 expected_constraint_name = identifier_converter(constraint_name)
                 editor.execute(
@@ -4578,6 +4639,31 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.alter_field(Author, new_field, old_field, strict=True)
         self.assertIsNone(self.get_column_collation(Author._meta.db_table, "name"))
+
+    @skipUnlessDBFeature("supports_collation_on_charfield")
+    def test_alter_primary_key_db_collation(self):
+        collation = connection.features.test_collations.get("non_default")
+        if not collation:
+            self.skipTest("Language collations are not supported.")
+
+        with connection.schema_editor() as editor:
+            editor.create_model(Thing)
+
+        old_field = Thing._meta.get_field("when")
+        new_field = CharField(max_length=1, db_collation=collation, primary_key=True)
+        new_field.set_attributes_from_name("when")
+        new_field.model = Thing
+        with connection.schema_editor() as editor:
+            editor.alter_field(Thing, old_field, new_field, strict=True)
+        self.assertEqual(self.get_primary_key(Thing._meta.db_table), "when")
+        self.assertEqual(
+            self.get_column_collation(Thing._meta.db_table, "when"),
+            collation,
+        )
+        with connection.schema_editor() as editor:
+            editor.alter_field(Thing, new_field, old_field, strict=True)
+        self.assertEqual(self.get_primary_key(Thing._meta.db_table), "when")
+        self.assertIsNone(self.get_column_collation(Thing._meta.db_table, "when"))
 
     @skipUnlessDBFeature(
         "supports_collation_on_charfield", "supports_collation_on_textfield"
